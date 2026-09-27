@@ -12,22 +12,22 @@ gets an answer **plus clickable links that jump to the exact second in the exact
    [2] DP Lecture 5 — Tabulation Recipe            @ 04:31   ▸ jump
 ```
 
-Every generic RAG demo returns a blob of text. This returns *a place in a video*.
+Every generic RAG demo returns a blob of text. This returns _a place in a video_.
 
 ---
 
 ## Stack
 
-| Layer | Choice |
-|---|---|
-| Playlist + audio | `yt-dlp` (Python API) |
-| Transcription | `faster-whisper` (CTranslate2), `large-v3`, batched |
-| Chunking | hand-written, time-window based |
-| Embeddings | `sentence-transformers` + `BAAI/bge-m3` (1024-dim) |
-| Vector store | **Qdrant Cloud** — same as day14 / day15 |
-| LLM | **Groq** `openai/gpt-oss-120b` — same as day15 / hiremeai |
-| CLI | `typer` + `rich` |
-| API + UI | `FastAPI` + a single HTML page with the YouTube IFrame API |
+| Layer            | Choice                                                     |
+| ---------------- | ---------------------------------------------------------- |
+| Playlist + audio | `yt-dlp` (Python API)                                      |
+| Transcription    | `faster-whisper` (CTranslate2), `large-v3`, batched        |
+| Chunking         | hand-written, time-window based                            |
+| Embeddings       | FastEmbed ONNX + `all-MiniLM-L6-v2` (384-dim)              |
+| Vector store     | **Qdrant Cloud** — same as day14 / day15                   |
+| LLM              | **Groq** `openai/gpt-oss-120b` — same as day15 / hiremeai  |
+| CLI              | `typer` + `rich`                                           |
+| API + UI         | `FastAPI` + a single HTML page with the YouTube IFrame API |
 
 ### Where this differs from `RAGPLAN.md`
 
@@ -63,16 +63,9 @@ uv sync --extra cuda
 If your GPU is newer than the shipped `ctranslate2` build, `transcribe.py` catches the
 failure and falls back to CPU `int8` with a printed warning. Slower, still correct.
 
-**Embeddings run on CPU by default.** `uv` pulls the CPU build of torch from PyPI, so bge-m3
-embeds on the CPU — fine for querying, and a few minutes rather than seconds when reindexing
-a full playlist. To put it on the GPU (~3GB download):
-
-```bash
-uv pip install torch --index-url https://download.pytorch.org/whl/cu124 --force-reinstall
-```
-
-Transcription is unaffected either way: `ctranslate2` ships its own CUDA support and already
-uses the GPU.
+**Embeddings use FastEmbed's CPU ONNX runtime.** The default `all-MiniLM-L6-v2` model is
+384-dimensional and about 90 MB. It does not require PyTorch; the optional CUDA extra above
+is only for CTranslate2 transcription.
 
 Keys come from the repo-root `.env` (already present):
 
@@ -110,7 +103,7 @@ uv run ytrag preflight --playlist "<PLAYLIST_URL>"
 ```
 
 Checks keys, Qdrant, the embedder, the Whisper model, the transcription code
-path, playlist listing and the LLM — about a minute. Each check *calls* the
+path, playlist listing and the LLM — about a minute. Each check _calls_ the
 thing rather than asserting it looks importable, because this exists after an
 8-hour run died ten seconds in on a missing import. Run it before any long
 ingest.
@@ -123,7 +116,7 @@ uv run ytrag langtest "https://www.youtube.com/watch?v=<one_lecture>"
 
 The lectures are Hinglish. `language="hi"` gives Devanagari output; `language="en"` gives
 romanised/translated output. Student queries will be romanised Hinglish or English, so these
-two produce *very* different retrieval behaviour.
+two produce _very_ different retrieval behaviour.
 
 Read a few minutes of each and check what happens to the technical terms specifically —
 memoization, adjacency list, time complexity, subproblem, DP table. Whichever keeps those
@@ -146,11 +139,11 @@ Transcription is the only expensive step, and it is paid exactly once — chunki
 embedding and indexing take seconds, and everything downstream rebuilds from cached
 transcripts.
 
-| config | speed | 68.7-hour playlist |
-|---|---|---|
-| `large-v3` sequential, beam 5 (as RAGPLAN specified) | 2.5x realtime | ~27 h |
-| `large-v3` **batch 8**, beam 5 — the default here | **8.1x** | **~8.5 h** |
-| `large-v3` batch 8, beam 1 | 10.5x | ~6.5 h |
+| config                                               | speed         | 68.7-hour playlist |
+| ---------------------------------------------------- | ------------- | ------------------ |
+| `large-v3` sequential, beam 5 (as RAGPLAN specified) | 2.5x realtime | ~27 h              |
+| `large-v3` **batch 8**, beam 5 — the default here    | **8.1x**      | **~8.5 h**         |
+| `large-v3` batch 8, beam 1                           | 10.5x         | ~6.5 h             |
 
 Batching is not a quality tradeoff: same model, same weights, identical technical-term
 capture in testing. The sequential path simply leaves the GPU idle between speech
@@ -202,7 +195,7 @@ uv run ytrag serve
 ```
 
 Then <http://127.0.0.1:8000>. Citations call `player.seekTo()` on the embedded player, so
-clicking `[2]` jumps *inside the page* rather than opening a tab.
+clicking `[2]` jumps _inside the page_ rather than opening a tab.
 
 ### Other commands
 
@@ -243,10 +236,9 @@ YTRAG_EMBED_MODEL=all-MiniLM-L6-v2 uv run ytrag reindex
 uv run ytrag ask "memoization kya hota hai?"
 ```
 
-`reindex` finds the bundled `transcripts/` automatically. Takes a few minutes on a laptop
-CPU — no GPU, no audio downloads, no yt-dlp. Use `all-MiniLM-L6-v2` (90 MB) rather than the
-default bge-m3 (2.2 GB): retrieval on Hinglish is somewhat worse, but it runs comfortably on
-any machine. Their index costs ~7 MB in a free Qdrant tier.
+`reindex` finds the bundled `transcripts/` automatically. It takes a few minutes on a laptop
+CPU — no GPU, no audio downloads, no yt-dlp. The default FastEmbed MiniLM model is about
+90 MB and suits small instances; rebuild the index if you change `YTRAG_EMBED_MODEL`.
 
 **3. Point it at their own playlist.** The full pipeline, on whatever content they have.
 That's the version that needs a GPU — and their own playlist is probably a lot shorter than
@@ -259,20 +251,20 @@ transcripts are precious and portable, everything downstream is disposable.
 
 Everything is env-driven; defaults live in [ytrag/config.py](ytrag/config.py).
 
-| Variable | Default | Notes |
-|---|---|---|
-| `YTRAG_WHISPER_LANG` | `en` | Decide this with `langtest` first |
-| `YTRAG_WHISPER_MODEL` | `large-v3` | `medium` if you're impatient |
-| `YTRAG_WHISPER_DEVICE` | `auto` | `cuda` / `cpu` to force |
-| `YTRAG_WHISPER_BATCH` | `8` | Batched inference — see below. `0` disables |
-| `YTRAG_WHISPER_BEAM` | `5` | `1` is ~30% faster, greedy decoding |
-| `YTRAG_CHUNK_SECONDS` | `75` | ~one explained idea |
-| `YTRAG_CHUNK_OVERLAP` | `15` | |
-| `YTRAG_EMBED_MODEL` | `BAAI/bge-m3` | `all-MiniLM-L6-v2` for a small deploy tier |
-| `YTRAG_COLLECTION` | `dsa_lectures` | the embedding dim gets appended |
-| `YTRAG_TOP_K` | `6` | |
-| `YTRAG_MAX_DISTANCE` | `0.5` | the grounding cutoff — see below, and re-tune |
-| `YTRAG_LLM_MODEL` | `openai/gpt-oss-120b` | |
+| Variable               | Default               | Notes                                         |
+| ---------------------- | --------------------- | --------------------------------------------- |
+| `YTRAG_WHISPER_LANG`   | `en`                  | Decide this with `langtest` first             |
+| `YTRAG_WHISPER_MODEL`  | `large-v3`            | `medium` if you're impatient                  |
+| `YTRAG_WHISPER_DEVICE` | `auto`                | `cuda` / `cpu` to force                       |
+| `YTRAG_WHISPER_BATCH`  | `8`                   | Batched inference — see below. `0` disables   |
+| `YTRAG_WHISPER_BEAM`   | `5`                   | `1` is ~30% faster, greedy decoding           |
+| `YTRAG_CHUNK_SECONDS`  | `75`                  | ~one explained idea                           |
+| `YTRAG_CHUNK_OVERLAP`  | `15`                  |                                               |
+| `YTRAG_EMBED_MODEL`    | `all-MiniLM-L6-v2`    | FastEmbed model name; reindex after changing  |
+| `YTRAG_COLLECTION`     | `dsa_lectures`        | the embedding dim gets appended               |
+| `YTRAG_TOP_K`          | `6`                   |                                               |
+| `YTRAG_MAX_DISTANCE`   | `0.5`                 | the grounding cutoff — see below, and re-tune |
+| `YTRAG_LLM_MODEL`      | `openai/gpt-oss-120b` |                                               |
 
 ---
 
@@ -280,18 +272,22 @@ Everything is env-driven; defaults live in [ytrag/config.py](ytrag/config.py).
 
 [eval/golden.json](eval/golden.json) holds two kinds of entry.
 
-**Retrieval** — a hit means the expected video appears in top-k *and* at least one returned
+**Retrieval** — a hit means the expected video appears in top-k _and_ at least one returned
 chunk overlaps `expect_around_sec ± tolerance_sec`:
 
 ```json
-{"q": "memoization vs tabulation kya difference hai?",
- "expect_video_id": "abc123", "expect_around_sec": 724, "tolerance_sec": 120}
+{
+  "q": "memoization vs tabulation kya difference hai?",
+  "expect_video_id": "abc123",
+  "expect_around_sec": 724,
+  "tolerance_sec": 120
+}
 ```
 
 **Refusal** — a hit means the pipeline declines to answer:
 
 ```json
-{"q": "React hooks kaise kaam karte hain?", "expect_refusal": true}
+{ "q": "React hooks kaise kaam karte hain?", "expect_refusal": true }
 ```
 
 The refusal entries ship working; the retrieval entries are templates you fill in with your
@@ -320,7 +316,7 @@ close match among, so that off-topic floor drifts downwards. Run `ytrag search` 
 real questions, read the distances, and re-tune with `ytrag eval`.
 
 Note what happened in testing with the loose value: the distance guard let all six chunks
-through on "React hooks kaise kaam karte hain?", and the *model's own* refusal is what saved
+through on "React hooks kaise kaam karte hain?", and the _model's own_ refusal is what saved
 the answer. That works, but it is one guard doing the job of two, and it costs an LLM call
 every time. The cutoff is the cheap guard — keep it armed.
 
@@ -329,7 +325,7 @@ every time. The cutoff is the cheap guard — keep it armed.
 ## The failure modes this codebase is built around
 
 **Don't use a generic text splitter.** `RecursiveCharacterTextSplitter` operates on one
-concatenated string and throws the timestamps away. The timestamp *is* the product here, so
+concatenated string and throws the timestamps away. The timestamp _is_ the product here, so
 [ytrag/chunk.py](ytrag/chunk.py) chunks on the segment list, in the time domain, and never
 splits a segment.
 
@@ -357,15 +353,15 @@ saying "cover nahi hua". Three guards in [ytrag/answer.py](ytrag/answer.py):
 3. an answer with zero citations is marked `grounded: false` and gets no links.
 
 **Idempotency.** Cached transcripts, `upsert` not `add`, deterministic point IDs
-(`uuid5` of `"{video_id}:{start_sec}"`), resume on partial failure. You *will* re-run this
+(`uuid5` of `"{video_id}:{start_sec}"`), resume on partial failure. You _will_ re-run this
 many times.
 
 ---
 
 ## Deploying (Phase 4)
 
-bge-m3 is ~2.2GB and won't fit a free tier. Because transcripts are cached, swapping is a few
-minutes of embedding rather than hours of re-transcription:
+The Free service uses FastEmbed's 384-dimensional MiniLM model and its matching bundled
+vectors. If you change the embedding model, reindex and export a matching vector bundle:
 
 ```bash
 YTRAG_EMBED_MODEL=all-MiniLM-L6-v2 uv run ytrag reindex

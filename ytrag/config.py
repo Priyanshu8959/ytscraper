@@ -76,21 +76,18 @@ LINK_REWIND_SECONDS = int(os.getenv("YTRAG_LINK_REWIND", 5))
 # ------------------------------------------------------------------
 # Embeddings
 # ------------------------------------------------------------------
-# all-MiniLM-L6-v2 by default, and the reasoning is worth keeping.
+# FastEmbed's quantized all-MiniLM-L6-v2 ONNX model is the default to keep
+# query-time memory small enough for a free web instance.
 #
-# bge-m3 is the "better" model on paper — multilingual, built for exactly this
-# code-switched Hinglish problem. But measured on this corpus of 2933 chunks:
+# Historical SentenceTransformer measurements on this corpus of 2933 chunks:
 #
 #            download   index (CPU)   top-1    top-5
 #   bge-m3     4.35 GB     55 min     12/12    12/12
 #   MiniLM       87 MB    1.6 min     11/12    12/12
 #
-# One question differs, and it still comes back at rank 2. Fifty times smaller
-# and thirty times faster for that. The title-boost re-ranking in index.py
-# recovers most of what the smaller model gives up, which is why the gap is so
-# narrow — better ranking turned out to be worth more than a bigger encoder.
+# They are not benchmarks of the current FastEmbed runtime. Re-run `ytrag eval`
+# before using them to compare current model choices.
 #
-# Set YTRAG_EMBED_MODEL=BAAI/bge-m3 and reindex if you want the last 1/12.
 EMBED_MODEL = os.getenv("YTRAG_EMBED_MODEL", "all-MiniLM-L6-v2")
 EMBED_BATCH = int(os.getenv("YTRAG_EMBED_BATCH", 16))
 # Some models want an instruction prefixed to the *query only*. bge-m3 does
